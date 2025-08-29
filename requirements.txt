@@ -1,6 +1,7 @@
-mediapipe
+opencv-python
 numpy
 Pillow
 moviepy
 requests
 flask
+gunicorn
