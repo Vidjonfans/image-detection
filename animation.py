@@ -1,54 +1,42 @@
-import mediapipe as mp
+import cv2
 import numpy as np
 from moviepy.editor import ImageSequenceClip
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image
 from io import BytesIO
 import tempfile
 import os
 
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True)
+# Haarcascade mouth detector (pre-trained xml file)
+MOUTH_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_smile.xml")
 
 def add_animation_on_mouth(image_url):
-    # 🔹 Load image from URL
+    # Load image from URL
     response = requests.get(image_url)
     img = Image.open(BytesIO(response.content)).convert("RGB")
-    w, h = img.size
-    img_np = np.array(img)
+    frame = np.array(img)
 
-    # Mediapipe expects RGB np.array
-    results = face_mesh.process(img_np)
+    gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+    mouths = MOUTH_CASCADE.detectMultiScale(gray, 1.8, 20)
 
-    if not results.multi_face_landmarks:
-        raise Exception("No face detected!")
+    if len(mouths) == 0:
+        raise Exception("No mouth detected!")
 
-    landmarks = results.multi_face_landmarks[0]
-    MOUTH_IDX = [61, 291, 0, 17, 78, 308]
+    (x, y, w, h) = mouths[0]
 
-    mouth_points = []
-    for idx in MOUTH_IDX:
-        x = int(landmarks.landmark[idx].x * w)
-        y = int(landmarks.landmark[idx].y * h)
-        mouth_points.append((x, y))
-
-    # 🔹 Animation frames
+    # Animation frames
     frames = []
     for i in range(15):
-        frame = img.copy()
-        draw = ImageDraw.Draw(frame)
-
-        # Simple animation: pulsating circle at mouth corner
+        temp = frame.copy()
         radius = 5 + i*2
-        cx, cy = mouth_points[0]
-        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), outline="red", width=3)
+        cx, cy = x + w//2, y + h//2
+        cv2.circle(temp, (cx, cy), radius, (255, 0, 0), 3)
+        frames.append(temp)
 
-        frames.append(np.array(frame))
-
-    # 🔹 Convert frames to video
+    # Save video
     temp_dir = tempfile.mkdtemp()
     video_path = os.path.join(temp_dir, "mouth_animation.mp4")
-    clip = ImageSequenceClip(frames, fps=5)
+    clip = ImageSequenceClip([cv2.cvtColor(f, cv2.COLOR_BGR2RGB) for f in frames], fps=5)
     clip.write_videofile(video_path, codec="libx264")
 
     return video_path
