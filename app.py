@@ -9,7 +9,7 @@ import uvicorn
 
 # FastAPI app
 app = FastAPI()
-
+app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 # Output folder
 OUTDIR = "outputs"
 os.makedirs(OUTDIR, exist_ok=True)
