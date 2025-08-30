@@ -154,3 +154,7 @@ async def process(request: Request, image_url: str = Query(..., description="Pub
         "frames_written": frame_count,
         "duration_seconds": duration
     }
+
+if __name__ == "__main__":
+    uvicorn.run("app:app", host="0.0.0.0", port=10000, reload=False)
+
