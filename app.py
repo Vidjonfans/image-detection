@@ -70,7 +70,7 @@ def animate_mouth(image, bbox, out_path, frames=24, fps=12):
 
 # ---- Run demo ----
 async def main():
-    url = "https://res.cloudinary.com/dvsubaggj/image/upload/v1756534286/e8283822a24d72765a6f51a801e33525_1_1_khuilj.png"
+    url = "https://images.rawpixel.com/image_800/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvcm0zMjgtMzY2LXRvbmctMDhfMS5qcGc.jpg"
     img = await fetch_image(url)
     bbox = detect_mouth(img)
     if bbox is None:
