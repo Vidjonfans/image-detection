@@ -4,19 +4,26 @@ import aiohttp
 import asyncio
 import os
 import uuid
+from fastapi import FastAPI, Query
+import uvicorn
 
-# Create output folder
+# FastAPI app
+app = FastAPI()
+
+# Output folder
 OUTDIR = "outputs"
 os.makedirs(OUTDIR, exist_ok=True)
 
-# Haar cascades (make sure these XML files exist in cascades/ folder)
+# Haar cascades
 face_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_frontalface_default.xml"))
 mouth_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_mcs_mouth.xml"))
 
-# ---- Helper: download image from URL ----
+# ---- Helper: download image ----
 async def fetch_image(url: str):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
+            if resp.status != 200:
+                return None
             data = await resp.read()
             nparr = np.frombuffer(data, np.uint8)
             return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -32,17 +39,18 @@ def detect_mouth(image):
     for (x, y, w, h) in faces:
         roi_gray = gray[y:y+h, x:x+w]
 
-        # detect mouths inside face region
-        mouths = mouth_cascade.detectMultiScale(roi_gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        mouths = mouth_cascade.detectMultiScale(
+            roi_gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+        )
         if len(mouths) == 0:
             continue
 
-        # take lowest mouth rectangle (because mouth usually at bottom of face)
+        # sabse niche wala mouth (bottom-most)
         (mx, my, mw, mh) = max(mouths, key=lambda m: m[1])
         return (x+mx, y+my, mw, mh)
     return None
 
-# ---- Animate mouth open/close ----
+# ---- Animate mouth ----
 def animate_mouth(image, bbox, out_path, frames=24, fps=12):
     (x, y, w, h) = bbox
     roi = image[y:y+h, x:x+w].copy()
@@ -53,7 +61,7 @@ def animate_mouth(image, bbox, out_path, frames=24, fps=12):
 
     for f in range(frames):
         t = f / frames
-        open_amt = np.sin(t * np.pi * 2) * 0.5 + 0.5   # oscillates between 0-1
+        open_amt = np.sin(t * np.pi * 2) * 0.5 + 0.5   # oscillates 0-1
         scale = 1.0 + 0.5 * open_amt
         new_h = max(1, int(height * scale))
         resized = cv2.resize(roi, (width, new_h))
@@ -68,17 +76,27 @@ def animate_mouth(image, bbox, out_path, frames=24, fps=12):
 
     writer.release()
 
-# ---- Run demo ----
-async def main():
-    url = "https://images.rawpixel.com/image_800/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvcm0zMjgtMzY2LXRvbmctMDhfMS5qcGc.jpg"
-    img = await fetch_image(url)
+# ---- API endpoint ----
+@app.get("/")
+def home():
+    return {"message": "Mouth animation API running"}
+
+@app.get("/process")
+async def process(image_url: str = Query(..., description="Public image URL")):
+    img = await fetch_image(image_url)
+    if img is None:
+        return {"error": "Image download failed"}
+
     bbox = detect_mouth(img)
     if bbox is None:
-        print("No mouth detected!")
-        return
+        return {"error": "No mouth detected!"}
+
     out_path = os.path.join(OUTDIR, f"anim_{uuid.uuid4().hex}.mp4")
     animate_mouth(img, bbox, out_path)
-    print("Video saved at:", out_path)
 
+    return {"video_url": f"/{out_path}"}
+
+# ---- Local run ----
 if __name__ == "__main__":
-    asyncio.run(main())
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
