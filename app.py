@@ -3,6 +3,7 @@ import numpy as np
 import aiohttp
 import os
 import uuid
+import subprocess
 from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -105,6 +106,25 @@ def animate_mouth(image, bbox, out_path, frames=24, fps=12):
 
     return written, duration
 
+# ---- Browser-friendly fix (ffmpeg re-encode) ----
+def fix_mp4(out_path):
+    fixed_path = out_path.replace(".mp4", "_fixed.mp4")
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", out_path,
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-shortest",
+                fixed_path
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        os.replace(fixed_path, out_path)  # overwrite original
+        print("[INFO] MP4 re-encoded for browser compatibility")
+    except Exception as e:
+        print("[ERROR] ffmpeg failed:", e)
+
 # ---- API endpoint ----
 @app.get("/")
 def home():
@@ -123,6 +143,9 @@ async def process(request: Request, image_url: str = Query(..., description="Pub
     out_path = os.path.join(OUTDIR, f"anim_{uuid.uuid4().hex}.mp4")
     frame_count, duration = animate_mouth(img, bbox, out_path)
 
+    # ✅ Browser friendly bnao
+    fix_mp4(out_path)
+
     # ✅ Full public URL generate karo
     base_url = str(request.base_url).rstrip("/")
     file_name = os.path.basename(out_path)
@@ -131,8 +154,3 @@ async def process(request: Request, image_url: str = Query(..., description="Pub
         "frames_written": frame_count,
         "duration_seconds": duration
     }
-
-# ---- Local run ----
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
