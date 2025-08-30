@@ -92,7 +92,18 @@ def animate_mouth(image, bbox, out_path, frames=24, fps=12):
         written += 1
 
     writer.release()
-    return written   # ✅ frame count return karega
+
+    # ✅ Duration calculate karo
+    cap = cv2.VideoCapture(out_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps_val = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
+
+    duration = 0
+    if fps_val > 0:
+        duration = total_frames / fps_val
+
+    return written, duration
 
 # ---- API endpoint ----
 @app.get("/")
@@ -110,14 +121,15 @@ async def process(request: Request, image_url: str = Query(..., description="Pub
         return {"error": "No mouth detected!"}
 
     out_path = os.path.join(OUTDIR, f"anim_{uuid.uuid4().hex}.mp4")
-    frame_count = animate_mouth(img, bbox, out_path)
+    frame_count, duration = animate_mouth(img, bbox, out_path)
 
     # ✅ Full public URL generate karo
     base_url = str(request.base_url).rstrip("/")
     file_name = os.path.basename(out_path)
     return {
         "video_url": f"{base_url}/outputs/{file_name}",
-        "frames_written": frame_count
+        "frames_written": frame_count,
+        "duration_seconds": duration
     }
 
 # ---- Local run ----
