@@ -10,9 +10,9 @@ OUTDIR = "outputs"
 os.makedirs(OUTDIR, exist_ok=True)
 
 # Haar cascades
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+face_cascade = cv2.CascadeClassifier(os.path.join("cash", "face.xml"))
 # custom mouth xml ko repo me save karo (cascades/haarcascade_mcs_mouth.xml)
-mouth_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_mcs_mouth.xml"))
+mouth_cascade = cv2.CascadeClassifier(os.path.join("cash", "face.xml"))
 
 # ---- Helper: download image from URL ----
 async def fetch_image(url: str):
