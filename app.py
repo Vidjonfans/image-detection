@@ -5,14 +5,16 @@ import asyncio
 import os
 import uuid
 from fastapi import FastAPI, Query
+from fastapi.staticfiles import StaticFiles   # ✅ ye missing tha
 import uvicorn
 
 # FastAPI app
 app = FastAPI()
-app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
-# Output folder
+
+# Static serve for outputs folder
 OUTDIR = "outputs"
 os.makedirs(OUTDIR, exist_ok=True)
+app.mount("/outputs", StaticFiles(directory=OUTDIR), name="outputs")
 
 # Haar cascades
 face_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_frontalface_default.xml"))
@@ -94,7 +96,7 @@ async def process(image_url: str = Query(..., description="Public image URL")):
     out_path = os.path.join(OUTDIR, f"anim_{uuid.uuid4().hex}.mp4")
     animate_mouth(img, bbox, out_path)
 
-    return {"video_url": f"/{out_path}"}
+    return {"video_url": f"/outputs/{os.path.basename(out_path)}"}
 
 # ---- Local run ----
 if __name__ == "__main__":
