@@ -1,7 +1,3 @@
-fastapi
-uvicorn[standard]
 opencv-python-headless
 numpy
 aiohttp
-python-multipart
-pydantic
