@@ -4,8 +4,8 @@ import aiohttp
 import asyncio
 import os
 import uuid
-from fastapi import FastAPI, Query
-from fastapi.staticfiles import StaticFiles   # ✅ ye missing tha
+from fastapi import FastAPI, Query, Request
+from fastapi.staticfiles import StaticFiles   # ✅ ye missing tha pehle
 import uvicorn
 
 # FastAPI app
@@ -84,7 +84,7 @@ def home():
     return {"message": "Mouth animation API running"}
 
 @app.get("/process")
-async def process(image_url: str = Query(..., description="Public image URL")):
+async def process(request: Request, image_url: str = Query(..., description="Public image URL")):
     img = await fetch_image(image_url)
     if img is None:
         return {"error": "Image download failed"}
@@ -96,7 +96,10 @@ async def process(image_url: str = Query(..., description="Public image URL")):
     out_path = os.path.join(OUTDIR, f"anim_{uuid.uuid4().hex}.mp4")
     animate_mouth(img, bbox, out_path)
 
-    return {"video_url": f"/outputs/{os.path.basename(out_path)}"}
+    # ✅ Full public URL generate karo
+    base_url = str(request.base_url).rstrip("/")
+    file_name = os.path.basename(out_path)
+    return {"video_url": f"{base_url}/outputs/{file_name}"}
 
 # ---- Local run ----
 if __name__ == "__main__":
