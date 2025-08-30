@@ -9,10 +9,9 @@ import uuid
 OUTDIR = "outputs"
 os.makedirs(OUTDIR, exist_ok=True)
 
-# Haar cascades
-face_cascade = cv2.CascadeClassifier(os.path.join("cash", "face.xml"))
-# custom mouth xml ko repo me save karo (cascades/haarcascade_mcs_mouth.xml)
-mouth_cascade = cv2.CascadeClassifier(os.path.join("cash", "face.xml"))
+# Haar cascades (make sure these XML files exist in cascades/ folder)
+face_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_frontalface_default.xml"))
+mouth_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_mcs_mouth.xml"))
 
 # ---- Helper: download image from URL ----
 async def fetch_image(url: str):
@@ -32,10 +31,14 @@ def detect_mouth(image):
 
     for (x, y, w, h) in faces:
         roi_gray = gray[y:y+h, x:x+w]
-        mouths = mouth_cascade.detectMultiScale(roi_gray, 1.5, 11)
+
+        # detect mouths inside face region
+        mouths = mouth_cascade.detectMultiScale(roi_gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         if len(mouths) == 0:
             continue
-        (mx, my, mw, mh) = max(mouths, key=lambda m: m[1])  # lowest rectangle
+
+        # take lowest mouth rectangle (because mouth usually at bottom of face)
+        (mx, my, mw, mh) = max(mouths, key=lambda m: m[1])
         return (x+mx, y+my, mw, mh)
     return None
 
