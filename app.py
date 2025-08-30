@@ -5,7 +5,7 @@ import asyncio
 import os
 import uuid
 from fastapi import FastAPI, Query, Request
-from fastapi.staticfiles import StaticFiles   # ✅ ye missing tha pehle
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 # FastAPI app
@@ -61,6 +61,7 @@ def animate_mouth(image, bbox, out_path, frames=24, fps=12):
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(out_path, fourcc, fps, (image.shape[1], image.shape[0]))
 
+    written = 0
     for f in range(frames):
         t = f / frames
         open_amt = np.sin(t * np.pi * 2) * 0.5 + 0.5   # oscillates 0-1
@@ -75,8 +76,10 @@ def animate_mouth(image, bbox, out_path, frames=24, fps=12):
         canvas[new_y1:new_y1+new_h, x:x+width] = resized[:image.shape[0]-new_y1, :]
 
         writer.write(canvas)
+        written += 1
 
     writer.release()
+    return written   # ✅ frame count return karega
 
 # ---- API endpoint ----
 @app.get("/")
@@ -94,12 +97,15 @@ async def process(request: Request, image_url: str = Query(..., description="Pub
         return {"error": "No mouth detected!"}
 
     out_path = os.path.join(OUTDIR, f"anim_{uuid.uuid4().hex}.mp4")
-    animate_mouth(img, bbox, out_path)
+    frame_count = animate_mouth(img, bbox, out_path)
 
     # ✅ Full public URL generate karo
     base_url = str(request.base_url).rstrip("/")
     file_name = os.path.basename(out_path)
-    return {"video_url": f"{base_url}/outputs/{file_name}"}
+    return {
+        "video_url": f"{base_url}/outputs/{file_name}",
+        "frames_written": frame_count
+    }
 
 # ---- Local run ----
 if __name__ == "__main__":
