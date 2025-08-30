@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import aiohttp
-import asyncio
 import os
 import uuid
 from fastapi import FastAPI, Query, Request
@@ -16,19 +15,33 @@ OUTDIR = "outputs"
 os.makedirs(OUTDIR, exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=OUTDIR), name="outputs")
 
-# Haar cascades
-face_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_frontalface_default.xml"))
-mouth_cascade = cv2.CascadeClassifier(os.path.join("cascades", "haarcascade_mcs_mouth.xml"))
+# Haar cascades path check
+CASCADE_DIR = "cascades"
+face_cascade_path = os.path.join(CASCADE_DIR, "haarcascade_frontalface_default.xml")
+mouth_cascade_path = os.path.join(CASCADE_DIR, "haarcascade_mcs_mouth.xml")
+
+if not os.path.exists(face_cascade_path):
+    raise FileNotFoundError(f"Face cascade not found: {face_cascade_path}")
+if not os.path.exists(mouth_cascade_path):
+    raise FileNotFoundError(f"Mouth cascade not found: {mouth_cascade_path}")
+
+# Haar cascades load
+face_cascade = cv2.CascadeClassifier(face_cascade_path)
+mouth_cascade = cv2.CascadeClassifier(mouth_cascade_path)
 
 # ---- Helper: download image ----
 async def fetch_image(url: str):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.read()
-            nparr = np.frombuffer(data, np.uint8)
-            return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.read()
+                nparr = np.frombuffer(data, np.uint8)
+                return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    except Exception as e:
+        print(f"[ERROR] fetch_image failed: {e}")
+        return None
 
 # ---- Detect mouth ----
 def detect_mouth(image):
@@ -90,7 +103,7 @@ def home():
 async def process(request: Request, image_url: str = Query(..., description="Public image URL")):
     img = await fetch_image(image_url)
     if img is None:
-        return {"error": "Image download failed"}
+        return {"error": "Image download failed or invalid URL"}
 
     bbox = detect_mouth(img)
     if bbox is None:
