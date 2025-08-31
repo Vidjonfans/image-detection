@@ -11,7 +11,14 @@ eye_cascade = cv2.CascadeClassifier(eye_cascade_path)
 def detect_eyes(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     eyes = eye_cascade.detectMultiScale(gray, 1.3, 5)
-    return eyes
+
+    refined = []
+    for (x, y, w, h) in eyes:
+        # Ignore upper eyebrow portion -> shift down 25% and reduce height
+        new_y = y + int(h * 0.25)
+        new_h = int(h * 0.55)   # sirf actual eye region rakho
+        refined.append((x, new_y, w, new_h))
+    return refined
 
 def animate_eyes(image, bboxes, out_path, frames=24, fps=12):
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -28,7 +35,7 @@ def animate_eyes(image, bboxes, out_path, frames=24, fps=12):
             roi_h, roi_w = roi.shape[:2]
 
             # Calculate how much to close
-            close_amt = int(h * t * 0.7)  # max 70% closure
+            close_amt = int(h * t * 0.9)  # max 90% closure
 
             # Copy background under eye
             bg_patch = image[y:y+h, x:x+w].copy()
