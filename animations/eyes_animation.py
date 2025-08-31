@@ -1,47 +1,48 @@
+# eyes_animation.py
 import cv2
 import numpy as np
-import mediapipe as mp
+import os
 
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True)
+CASCADE_DIR = "cascades"
+eye_cascade_path = os.path.join(CASCADE_DIR, "haarcascade_eye.xml")
 
-def blink_eyes(image, frame_num, total_frames):
-    h, w, _ = image.shape
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(rgb)
+eye_cascade = cv2.CascadeClassifier(eye_cascade_path)
 
-    if not results.multi_face_landmarks:
-        return image
-    
-    for face_landmarks in results.multi_face_landmarks:
-        # Left and right eye landmark indices
-        LEFT_EYE = [33, 160, 158, 133, 153, 144]
-        RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+def detect_eyes(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    eyes = eye_cascade.detectMultiScale(gray, 1.3, 5)
+    return eyes
 
-        for eye in [LEFT_EYE, RIGHT_EYE]:
-            points = [(int(face_landmarks.landmark[i].x * w),
-                       int(face_landmarks.landmark[i].y * h)) for i in eye]
+def animate_eyes(image, bboxes, out_path, frames=24, fps=12):
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(out_path, fourcc, fps, (image.shape[1], image.shape[0]))
 
-            # Eye bounding box
-            x_min = min([p[0] for p in points])
-            x_max = max([p[0] for p in points])
-            y_min = min([p[1] for p in points])
-            y_max = max([p[1] for p in points])
+    for f in range(frames):
+        # blink curve (0=open, 1=closed, 0=open)
+        t = (np.sin(f / frames * np.pi) ** 2)
 
-            eye_roi = image[y_min:y_max, x_min:x_max].copy()
+        canvas = image.copy()
 
-            # Blink effect (eye closes in middle frames)
-            blink_ratio = abs(np.sin(np.pi * frame_num / total_frames))
-            shrink = int((y_max - y_min) * blink_ratio * 0.6)
+        for (x, y, w, h) in bboxes:
+            roi = image[y:y+h, x:x+w].copy()
+            roi_h, roi_w = roi.shape[:2]
 
-            if shrink > 0:
-                eye_roi = cv2.resize(eye_roi, (x_max - x_min, (y_max - y_min) - shrink))
-                # Pad back to original size
-                eye_roi = cv2.copyMakeBorder(
-                    eye_roi, shrink//2, shrink - shrink//2, 0, 0,
-                    cv2.BORDER_REPLICATE
-                )
+            # Calculate how much to close
+            close_amt = int(h * t * 0.7)  # max 70% closure
 
-            image[y_min:y_max, x_min:x_max] = eye_roi
+            # Copy background under eye
+            bg_patch = image[y:y+h, x:x+w].copy()
+            canvas[y:y+h, x:x+w] = bg_patch
 
-    return image
+            # Shrink ROI vertically
+            new_h = max(1, roi_h - close_amt)
+            resized = cv2.resize(roi, (roi_w, new_h))
+
+            # Position eye at center vertically
+            top = y + (roi_h - new_h) // 2
+            canvas[top:top+new_h, x:x+w] = resized
+
+        writer.write(canvas)
+
+    writer.release()
+    return frames
