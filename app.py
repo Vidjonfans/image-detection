@@ -45,45 +45,53 @@ async def fetch_image(url: str):
         return None
 
 # ---- Detect mouth ----
-def detect_eyes(image):
+def detect_mouth(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
     if len(faces) == 0:
         return None
 
-    eyes_bboxes = []
     for (x, y, w, h) in faces:
         roi_gray = gray[y:y+h, x:x+w]
-        eyes = eye_cascade.detectMultiScale(
-            roi_gray, scaleFactor=1.1, minNeighbors=5, minSize=(20, 20)
-        )
-        for (ex, ey, ew, eh) in eyes:
-            eyes_bboxes.append((x+ex, y+ey, ew, eh))
-    return eyes_bboxes if eyes_bboxes else None
 
+        mouths = mouth_cascade.detectMultiScale(
+            roi_gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+        )
+        if len(mouths) == 0:
+            continue
+
+        # sabse niche wala mouth (bottom-most)
+        (mx, my, mw, mh) = max(mouths, key=lambda m: m[1])
+        return (x+mx, y+my, mw, mh)
+    return None
 
 # ---- Animate mouth ----
-def animate_eyes(image, bboxes, out_path, frames=24, fps=12):
-    canvases = []
-    height, width = image.shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
+def animate_mouth(image, bbox, out_path, frames=24, fps=12):
+    (x, y, w, h) = bbox
+    roi = image[y:y+h, x:x+w].copy()
 
+    height, width = roi.shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(out_path, fourcc, fps, (image.shape[1], image.shape[0]))
+
+    written = 0
     for f in range(frames):
         t = f / frames
-        blink_amt = (np.sin(t * np.pi * 4) + 1) / 2  # oscillates 0-1 (blink)
-        canvas = image.copy()
+        open_amt = np.sin(t * np.pi * 2) * 0.5 + 0.5   # oscillates 0-1
+        scale = 1.0 + 0.5 * open_amt
+        new_h = max(1, int(height * scale))
+        resized = cv2.resize(roi, (width, new_h))
 
-        for (x, y, w, h) in bboxes:
-            eye_roi = image[y:y+h, x:x+w].copy()
-            new_h = max(1, int(h * (1 - 0.8 * blink_amt)))  # blink squish
-            resized_eye = cv2.resize(eye_roi, (w, new_h))
-            center_y = y + h // 2
-            new_y1 = int(center_y - new_h // 2)
-            canvas[new_y1:new_y1+new_h, x:x+w] = resized_eye[:image.shape[0]-new_y1, :]
-        
+        canvas = image.copy()
+        center_y = y + height // 2
+        new_y1 = int(center_y - new_h // 2)
+        new_y1 = max(0, min(new_y1, image.shape[0]-new_h))
+        canvas[new_y1:new_y1+new_h, x:x+width] = resized[:image.shape[0]-new_y1, :]
+
         writer.write(canvas)
-    
+        written += 1
+
     writer.release()
 
     # ✅ Duration calculate karo
@@ -118,30 +126,19 @@ def fix_mp4(out_path):
         print("[ERROR] ffmpeg failed:", e)
 
 # ---- API endpoint ----
-@app.get("/process_eyes")
-async def process_eyes(request: Request, image_url: str):
+@app.get("/")
+def home():
+    return {"message": "Mouth animation API running"}
+
+@app.get("/process")
+async def process(request: Request, image_url: str = Query(..., description="Public image URL")):
     img = await fetch_image(image_url)
     if img is None:
         return {"error": "Image download failed or invalid URL"}
 
-    bboxes = detect_eyes(img)
-    if bboxes is None:
-        return {"error": "No eyes detected!"}
-
-    out_path = os.path.join(OUTDIR, f"blink_{uuid.uuid4().hex}.mp4")
-    animate_eyes(img, bboxes, out_path)
-    fix_mp4(out_path)
-
-    base_url = str(request.base_url).rstrip("/")
-    file_name = os.path.basename(out_path)
-    return {
-        "video_url": f"{base_url}/outputs/{file_name}",
-        "eyes_detected": len(bboxes)
-    }
-
-
-
-    
+    bbox = detect_mouth(img)
+    if bbox is None:
+        return {"error": "No mouth detected!"}
 
     out_path = os.path.join(OUTDIR, f"anim_{uuid.uuid4().hex}.mp4")
     frame_count, duration = animate_mouth(img, bbox, out_path)
@@ -160,4 +157,3 @@ async def process_eyes(request: Request, image_url: str):
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=10000, reload=False)
-
