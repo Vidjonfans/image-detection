@@ -13,6 +13,13 @@ STATIC = BASE / "static"
 OUT = STATIC / "outputs"
 WEIGHTS = BASE / "weights"
 
+# ✅ Ensure outputs directory is valid
+if OUT.exists():
+    if OUT.is_file():
+        OUT.unlink()
+elif not OUT.exists():
+    OUT.mkdir(parents=True, exist_ok=True)
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 @app.get("/")
@@ -27,8 +34,11 @@ async def animate(source_image: UploadFile = File(...),
     workdir = OUT / job_id
 
     try:
-        if workdir.exists() and not workdir.is_dir():
-            workdir.unlink()
+        if workdir.exists():
+            if workdir.is_file():
+                workdir.unlink()
+            elif workdir.is_dir():
+                shutil.rmtree(workdir)
         workdir.mkdir(parents=True, exist_ok=True)
 
         src = workdir / "source.jpg"
@@ -60,8 +70,11 @@ async def animate_from_url(image_url: str = Form(...),
     workdir = OUT / job_id
 
     try:
-        if workdir.exists() and not workdir.is_dir():
-            workdir.unlink()
+        if workdir.exists():
+            if workdir.is_file():
+                workdir.unlink()
+            elif workdir.is_dir():
+                shutil.rmtree(workdir)
         workdir.mkdir(parents=True, exist_ok=True)
 
         src = workdir / "source.jpg"
