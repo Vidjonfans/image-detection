@@ -1,1 +1,13 @@
-tydfugiohjpk
+services:
+  - type: web
+    name: image-gan-anim
+    env: python
+    plan: standard
+    buildCommand: |
+      pip install -r requirements.txt
+      git submodule update --init --recursive  # only if you're using FOMM as submodule
+      bash scripts/download_assets.sh          # downloads vox-cpk.pth.tar + vox-256.yaml
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.13
