@@ -18,4 +18,5 @@ wheel
 scikit-learn==1.3.2
 pandas==2.2.2
 omegaconf==2.3.0
+python-multipart==0.0.6
 
