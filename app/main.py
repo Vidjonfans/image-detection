@@ -26,23 +26,31 @@ async def animate(source_image: UploadFile = File(...),
     job_id = uuid.uuid4().hex[:10]
     workdir = OUT / job_id
 
-    # ✅ Safety check: delete if it's a file
-    if workdir.exists() and not workdir.is_dir():
-        workdir.unlink()
-    workdir.mkdir(parents=True, exist_ok=True)
+    try:
+        if workdir.exists() and not workdir.is_dir():
+            workdir.unlink()
+        workdir.mkdir(parents=True, exist_ok=True)
 
-    src = workdir / "source.jpg"
-    drv = workdir / "driving.mp4"
-    outp = workdir / "result.mp4"
+        src = workdir / "source.jpg"
+        drv = workdir / "driving.mp4"
+        outp = workdir / "result.mp4"
 
-    with src.open("wb") as f:
-        shutil.copyfileobj(source_image.file, f)
-    with drv.open("wb") as f:
-        shutil.copyfileobj(driving_video.file, f)
+        with src.open("wb") as f:
+            shutil.copyfileobj(source_image.file, f)
+        with drv.open("wb") as f:
+            shutil.copyfileobj(driving_video.file, f)
 
-    result = process_no_crop(src, drv, WEIGHTS, outp, fps=fps)
-    url = f"/static/outputs/{job_id}/result.mp4"
-    return {"url": url, "job_id": job_id}
+        result = process_no_crop(src, drv, WEIGHTS, outp, fps=fps)
+
+        if not outp.exists():
+            return {"error": "Animation failed: result.mp4 not created", "job_id": job_id}
+
+        url = f"/static/outputs/{job_id}/result.mp4"
+        return {"url": url, "job_id": job_id}
+
+    except Exception as e:
+        return {"error": str(e), "job_id": job_id}
+
 
 @app.post("/animate-url")
 async def animate_from_url(image_url: str = Form(...),
@@ -51,38 +59,59 @@ async def animate_from_url(image_url: str = Form(...),
     job_id = uuid.uuid4().hex[:10]
     workdir = OUT / job_id
 
-    # ✅ Safety check: delete if it's a file
-    if workdir.exists() and not workdir.is_dir():
-        workdir.unlink()
-    workdir.mkdir(parents=True, exist_ok=True)
+    try:
+        if workdir.exists() and not workdir.is_dir():
+            workdir.unlink()
+        workdir.mkdir(parents=True, exist_ok=True)
 
-    src = workdir / "source.jpg"
-    drv = workdir / "driving.mp4"
-    outp = workdir / "result.mp4"
+        src = workdir / "source.jpg"
+        drv = workdir / "driving.mp4"
+        outp = workdir / "result.mp4"
 
-    # Step 1: Download image from URL
-    response = requests.get(image_url)
-    response.raise_for_status()
-    with src.open("wb") as f:
-        f.write(response.content)
+        # Step 1: Download image
+        try:
+            response = requests.get(image_url)
+            response.raise_for_status()
+            with src.open("wb") as f:
+                f.write(response.content)
+        except Exception as e:
+            return {"error": f"Image download failed: {str(e)}", "job_id": job_id}
 
-    # Step 2: Optional object detection (MediaPipe)
-    image = cv2.imread(str(src))
-    mp_face = mp.solutions.face_mesh.FaceMesh(static_image_mode=True)
-    results = mp_face.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    if results.multi_face_landmarks:
-        for face_landmarks in results.multi_face_landmarks:
-            for pt in face_landmarks.landmark:
-                x = int(pt.x * image.shape[1])
-                y = int(pt.y * image.shape[0])
-                cv2.circle(image, (x, y), 1, (0, 255, 0), -1)
-        cv2.imwrite(str(src), image)
+        # Step 2: MediaPipe face detection
+        try:
+            image = cv2.imread(str(src))
+            if image is None:
+                return {"error": "Downloaded image is unreadable", "job_id": job_id}
 
-    # Step 3: Save driving video
-    with drv.open("wb") as f:
-        shutil.copyfileobj(driving_video.file, f)
+            mp_face = mp.solutions.face_mesh.FaceMesh(static_image_mode=True)
+            results = mp_face.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+            if results.multi_face_landmarks:
+                for face_landmarks in results.multi_face_landmarks:
+                    for pt in face_landmarks.landmark:
+                        x = int(pt.x * image.shape[1])
+                        y = int(pt.y * image.shape[0])
+                        cv2.circle(image, (x, y), 1, (0, 255, 0), -1)
+                cv2.imwrite(str(src), image)
+        except Exception as e:
+            return {"error": f"MediaPipe processing failed: {str(e)}", "job_id": job_id}
 
-    # Step 4: Animate
-    result = process_no_crop(src, drv, WEIGHTS, outp, fps=fps)
-    url = f"/static/outputs/{job_id}/result.mp4"
-    return {"url": url, "job_id": job_id}
+        # Step 3: Save driving video
+        try:
+            with drv.open("wb") as f:
+                shutil.copyfileobj(driving_video.file, f)
+        except Exception as e:
+            return {"error": f"Driving video save failed: {str(e)}", "job_id": job_id}
+
+        # Step 4: Animate
+        try:
+            result = process_no_crop(src, drv, WEIGHTS, outp, fps=fps)
+            if not outp.exists():
+                return {"error": "Animation failed: result.mp4 not created", "job_id": job_id}
+        except Exception as e:
+            return {"error": f"FOMM animation failed: {str(e)}", "job_id": job_id}
+
+        url = f"/static/outputs/{job_id}/result.mp4"
+        return {"url": url, "job_id": job_id}
+
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}", "job_id": job_id}
