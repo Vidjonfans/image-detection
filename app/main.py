@@ -25,7 +25,12 @@ async def animate(source_image: UploadFile = File(...),
                   fps: int = 25):
     job_id = uuid.uuid4().hex[:10]
     workdir = OUT / job_id
+
+    # ✅ Safety check: delete if it's a file
+    if workdir.exists() and not workdir.is_dir():
+        workdir.unlink()
     workdir.mkdir(parents=True, exist_ok=True)
+
     src = workdir / "source.jpg"
     drv = workdir / "driving.mp4"
     outp = workdir / "result.mp4"
@@ -45,7 +50,12 @@ async def animate_from_url(image_url: str = Form(...),
                            fps: int = 25):
     job_id = uuid.uuid4().hex[:10]
     workdir = OUT / job_id
+
+    # ✅ Safety check: delete if it's a file
+    if workdir.exists() and not workdir.is_dir():
+        workdir.unlink()
     workdir.mkdir(parents=True, exist_ok=True)
+
     src = workdir / "source.jpg"
     drv = workdir / "driving.mp4"
     outp = workdir / "result.mp4"
